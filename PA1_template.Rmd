@@ -6,20 +6,144 @@ output:
 ---
 
 
+
+
 ## Loading and preprocessing the data
-
-
+Read the csv file to viable "data"
+```{r}
+data<-read.csv("activity.csv" )
+library(dplyr)
+head(data)
+```
 
 ## What is mean total number of steps taken per day?
+Delete rows with missing values. Get "dataDate".
+```{r}
+dataNoNa<-subset(data,!is.na(steps)&!is.na(date)&!is.na(interval)      )
+dataDate<-dataNoNa
+dataDate[,2]<-as.Date(dataNoNa[,2] )
+summary(dataDate)
+```
 
+Group "dataDate" by date and sum steps
+```{r}
+Date<-group_by(dataDate, date)
+dataTotal<-summarize(Date, StepsPerDay= sum(steps,na.rm=TRUE))
+dataTotal<-as.data.frame(dataTotal)
+head(dataTotal)
+```
 
+Make histgram
+```{r}
+hist(dataTotal$StepsPerDay, col='orange', main="with Na")
+```
+
+Calculate the mean and median total number of steps taken per day
+```{r}
+MeanSteps<-as.character(mean(dataTotal[,2],na.rm=TRUE))
+MedianSteps<-median(dataTotal[,2],na.rm=TRUE)
+```
+The mean value is `r MeanSteps`    
+The median value is `r MedianSteps`
 
 ## What is the average daily activity pattern?
+Group "dataDate" by interval.  Calculate mean values.
+```{r}
+Interval<-group_by(dataDate, interval)
+dataAveraged<-summarize(Interval, StepsAveraged= mean(steps,na.rm=TRUE))
+dataAveraged<-as.data.frame(dataAveraged)
+```
 
+Plot the data
+```{r}
+plot(dataAveraged$interval,dataAveraged$StepsAveraged, type="l")
+```
 
+Calculate the max value
+```{r}
+MaxAverageInterval<-dataAveraged[match(max(dataAveraged$StepsAveraged),dataAveraged$StepsAveraged),1]
+```
+Max value comes from interval `r MaxAverageInterval`
 
 ## Imputing missing values
+Make a array of rows with missing values. Count them.
+```{r}
+NaNumber<-sum(is.na(data[,1]))
+```
+The original data has `r NaNumber` NAs.  
 
+Replace NA with the average steps of that interval.  Save as "dataNew"
+```{r}
+dataNew<-data
+for(i in 1:nrow(data)){
+	if (is.na(data[i,1])){
+		currentInterval<-data[i,3]
+		rn<-match(currentInterval,dataAveraged[,1])
+		if(!is.na(rn)){temp<-dataAveraged[rn,2]}else{temp<-0}
+		dataNew[i,1]<-temp
+	}
+}
+head(dataNew)
+```
+Make a histogram of the total number of steps taken each day
+```{r}
+Date<-group_by(dataNew, date)
+dataTotal2<-summarize(Date, StepsPerDay= sum(steps,na.rm=TRUE))
+dataTotal2<-as.data.frame(dataTotal2)
+hist(dataTotal2$StepsPerDay, col='green', main="without Na")
+```
+  
+Calculate and report the mean and median total number of steps taken per day
+```{r}
+MeanSteps2<-as.character(mean(dataTotal2[,2],na.rm=TRUE))
+MedianSteps2<-as.character(median(dataTotal2[,2],na.rm=TRUE))
+```
+The mean value of new data is `r MeanSteps2`, the same as the old mean value `r MeanSteps`  
+The median value of new data is `r MedianSteps2`, larger than the old median value `r MedianSteps`.
+
+Compare these two hisgrams. 
+```{r}
+par(mfrow=c(1,2))
+hist(dataTotal$StepsPerDay, col='orange',main="with Na", )
+hist(dataTotal2$StepsPerDay, col='green', main="without Na")
+```
+
+We find the first three columns from the left become taller after we replace Na with the average steps of that interval.  The other two columns on the right increase less.  The reason is:  suppose one day increases to the top two collumn.  That day should have large  original value before replacement otherwise it may only be able to stay at the left three collumns.  Large original value means a few Na.  Second, it should have a lot Na, otherwise it would not increase much after the replacement.  That's incoherent with the first implication.  Therefore, it rarely happens.  Therefore, the left three will increase a lot while the right two increase less.  Then, the median and mean value may not change much.
 
 
 ## Are there differences in activity patterns between weekdays and weekends?
+Divide the data into two: dataD for weekdays, dataE for weekends.
+```{r}
+dataNew2<-dataNew
+Days<-as.Date(dataNew$date)
+DorE<-(weekdays(Days)=="星期六")|(weekdays(Days)=="星期日")
+dataNew3<-mutate(dataNew2, DorE=DorE)
+dataD<-subset(dataNew3, DorE==FALSE)
+dataE<-subset(dataNew3, DorE==TRUE)
+summary(dataD)
+summary(dataE)
+```
+
+Group each data by the day.
+```{r}
+Interval<-group_by(dataD, interval)
+dataDA<-summarize(Interval, StepsAveraged= mean(steps,na.rm=TRUE))
+dataDA<-as.data.frame(dataDA)
+dataDA$DorE<-rep(FALSE,nrow(dataDA))
+
+Interval<-group_by(dataE, interval)
+dataEA<-summarize(Interval, StepsAveraged= mean(steps,na.rm=TRUE))
+dataEA<-as.data.frame(dataEA)
+dataEA$DorE<-rep(TRUE,nrow(dataEA))
+```
+
+Rbind them two.  The new dataset is saved as "dataNew4" 
+```{r}
+dataNew4<-rbind(dataDA,dataEA)
+dataNew4$DorE<-factor(dataNew4$DorE, labels=c("Weekdays","Weekends"))
+```
+Plot the data
+```{r}
+library(lattice) 
+xyplot(StepsAveraged~interval|DorE, dataNew4, layout=c(1,2), type='l' )
+```
